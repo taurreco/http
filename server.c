@@ -9,9 +9,10 @@
 #include <errno.h>
 #include <unistd.h>
 
-
+#include "http.h"
 
 #define MAX_CONNS   12
+#define BUFSIZE     300
 #define PORT        "8080"
 
 /*********************************************************************
@@ -20,10 +21,16 @@
  *                                                                   *
  *********************************************************************/
 
+/********
+ * conn *
+ ********/
+
+/* data associated with a connection */
+
 struct conn {
+    pthread_t thr;
     struct sockaddr addr;
     int fd, addrlen;
-    /* immutable address & port */
 };
 
 /*********************************************************************
@@ -85,7 +92,7 @@ server_gai()
         exit(EXIT_FAILURE);
     }
 
-    /* take the very last matching sockhintsaddr */
+    /* takeURISIZE the very last matching sockhintsaddr */
 
     for (p = res; p != NULL; p = p->ai_next) {
         
@@ -124,10 +131,54 @@ server_gai()
 
 void
 conn_init(struct conn* conn, int fd, struct sockaddr* addr, socklen_t addrlen) {
+    conn->thr = 0;
     conn->fd = fd;
     memcpy(&conn->addr, addr, addrlen);
     conn->addrlen = addrlen;
 }
+
+/*********************************************************************
+ *                                                                   *
+ *                       concurrent functions                        *
+ *                                                                   *
+ *********************************************************************/
+
+/***************
+ * conn_handle *
+ ***************/
+
+/* handles the connection in a loop */
+
+void*
+conn_handle(void* arg)
+{
+    int n_bytes;
+    struct conn* conn;
+    char buf[BUFSIZE];
+    
+    conn = arg;
+
+    while (1) {
+        n_bytes = recv(conn->fd, buf, BUFSIZE, 0);
+        
+        if (n_bytes == 0) {
+            /* client connection ended */
+            return NULL;
+        }
+
+        if (n_bytes < 0) {
+            fprintf(stderr, "[ERROR] client %d, recv: %s\n", conn->fd, strerror(errno));
+            return (void*)EXIT_FAILURE;
+        }
+
+        /* ASSUMING n_bytes < BUFSIZE */
+        buf[n_bytes] = 0;
+
+        /* parse buf assuming the entire request is in buf */
+        printf("recieved %s from client %d\n", buf, conn->fd);
+    }
+}
+
 
 /*********************************************************************
  *                                                                   *
@@ -138,8 +189,6 @@ conn_init(struct conn* conn, int fd, struct sockaddr* addr, socklen_t addrlen) {
 /********
  * main *
  ********/
-
-/* ./server <ip-addr> <port> */
 
 int
 main()
@@ -165,19 +214,36 @@ main()
     printf("[SERVER] listening ... OK\n");
 
     while (1) {
+        struct conn* conn;
+
+        if (n_conns >= MAX_CONNS)
+            break;
+
         conn_fd = accept(server_fd, (struct sockaddr*)&client, &server_len);
 
         if (conn_fd == -1) {
             if (errno == EAGAIN || errno == EWOULDBLOCK)
                 continue;
 
-            close(server_fd);
             fprintf(stderr, "[ERROR] accept: %s\n", strerror(errno));
-            exit(EXIT_FAILURE);
+            break;
         }
 
         printf("connected with a client!\n");
 
-        conn_init(conns + n_conns, conn_fd, (struct sockaddr*)&client, client_len);
+        conn = conns + n_conns;
+
+        conn_init(conn, conn_fd, (struct sockaddr*)&client, client_len);
+    
+        status = pthread_create(&conn->thr, NULL, conn_handle, (void*)conn);
+
+        if (status < 0) {
+            fprintf(stderr, "[ERROR] pthread_create: %s\n", strerror(status));
+            break;
+        }
+
+        n_conns++;
     }
+
+    close(server_fd);
 }
