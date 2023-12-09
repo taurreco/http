@@ -11,9 +11,9 @@
 
 #include "http.h"
 
-#define MAX_CONNS   12
-#define BUFSIZE     300
-#define PORT        "8080"
+#define PORT             "8080"
+#define MAX_NUM_CONNS    12
+#define MAX_BUF_LEN      300
 
 /*********************************************************************
  *                                                                   *
@@ -42,7 +42,7 @@ struct conn {
 // global state for server, use unix socket struct as addr field for conn
 
 int n_conns;
-struct conn conns[MAX_CONNS];
+struct conn conns[MAX_NUM_CONNS];
 
 int server_fd;
 struct sockaddr server;
@@ -64,7 +64,7 @@ void
 server_init()
 {
     n_conns = 0;
-    memset(conns, 0, MAX_CONNS * sizeof(struct conn));
+    memset(conns, 0, MAX_NUM_CONNS * sizeof(struct conn));
     server_fd = 0;
     memset(&server, 0, sizeof(struct sockaddr));
     server_len = 0;
@@ -92,7 +92,7 @@ server_gai()
         exit(EXIT_FAILURE);
     }
 
-    /* takeURISIZE the very last matching sockhintsaddr */
+    /* take the very last matching addrinfo */
 
     for (p = res; p != NULL; p = p->ai_next) {
         
@@ -154,12 +154,12 @@ conn_handle(void* arg)
 {
     int n_bytes;
     struct conn* conn;
-    char buf[BUFSIZE];
+    char buf[MAX_BUF_LEN];
     
     conn = arg;
 
     while (1) {
-        n_bytes = recv(conn->fd, buf, BUFSIZE, 0);
+        n_bytes = recv(conn->fd, buf, MAX_BUF_LEN, 0);
         
         if (n_bytes == 0) {
             /* client connection ended */
@@ -171,7 +171,7 @@ conn_handle(void* arg)
             return (void*)EXIT_FAILURE;
         }
 
-        /* ASSUMING n_bytes < BUFSIZE */
+        /* ASSUMING n_bytes < MAX_BUF_LEN */
         buf[n_bytes] = 0;
 
         /* parse buf assuming the entire request is in buf */
@@ -197,11 +197,20 @@ main()
     struct sockaddr_storage* client;
     socklen_t client_len;
 
+    /* initialize data */
+
     server_init();
+    status = view_init();
+    if (status < 0) {
+        fprintf(stderr, "[ERROR] view_init");
+        exit(EXIT_FAILURE);
+    }
     server_gai();
 
     client_len = 0;
     client = NULL;
+
+    /* listen */
 
     status = listen(server_fd, SOMAXCONN);
 
@@ -213,10 +222,12 @@ main()
 
     printf("[SERVER] listening ... OK\n");
 
+    /* connection accept loop */
+
     while (1) {
         struct conn* conn;
 
-        if (n_conns >= MAX_CONNS)
+        if (n_conns >= MAX_NUM_CONNS)
             break;
 
         conn_fd = accept(server_fd, (struct sockaddr*)&client, &server_len);
@@ -229,7 +240,7 @@ main()
             break;
         }
 
-        printf("connected with a client!\n");
+        printf("[SERVER] connected with a client!\n");
 
         conn = conns + n_conns;
 
@@ -245,5 +256,6 @@ main()
         n_conns++;
     }
 
+    view_free();
     close(server_fd);
 }

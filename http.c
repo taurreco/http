@@ -1,4 +1,23 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <sys/mman.h>
+#include <errno.h>
 #include "http.h"
+
+/*********************************************************************
+ *                                                                   *
+ *                           global data                             *
+ *                                                                   *
+ *********************************************************************/
+
+extern struct page view[] = {
+    { "/index.html" },
+    { "/webserver.png" }
+};
+
+char* view_loc = "pages";
 
 /*********************************************************************
  *                                                                   *
@@ -6,21 +25,86 @@
  *                                                                   *
  *********************************************************************/
 
+/*************
+ * view_init *
+ *************/
+
+int
+view_init()
+{
+    FILE* fp;
+    int n_pages, status, fd, size;
+    uint8_t* data;
+    struct file* file;
+
+    n_pages = sizeof(view) / sizeof(struct page);
+
+    for (int i = 0; i < n_pages; i++) {
+        char* path;
+
+        file = &view[i].file;
+
+        status = asprintf(&path, "%s%s", view_loc, view[i].uri);
+
+        if (status < 0)
+            return -1;
+
+        fp = fopen(path, "r");
+
+        if (fp == NULL) {
+            fprintf(stderr, "[ERROR] fopen %s\n", strerror(errno));
+            free(path);
+            return -1;
+        }
+
+        /* get file size */
+
+        fseek(fp, 0, SEEK_END);
+        size = ftell(fp);
+        fseek(fp, 0, SEEK_SET);
+
+        /* map file */
+
+        fd = fileno(fp);
+        data = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
+
+        if (data < 0) {
+            fprintf(stderr, "[ERROR] mmap %s\n", strerror(errno));
+            fclose(fp);
+            view_free();
+            free(path);
+            return -1;
+        }
+
+        file->fp = fp;
+        file->data = data;
+        file->fd = fd;
+        file->size = size;
+        
+        free(path);
+    }
+}
+
 /****************
- * init_request *
+ * request_init *
  ****************/
 
 void 
-init_request(struct request* req);
+request_init(struct request* req)
+{
+    memset(req, 0, sizeof(struct request));
+}
 
 /*****************
- * init_response *
+ * response_init *
  *****************/
 
-int 
-init_response(struct response* resp);
+void 
+response_init(struct response* resp) 
+{
+}
 
- /********************************************************************
+/********************************************************************
  *                                                                   *
  *                             conversion                            *
  *                                                                   *
@@ -30,8 +114,11 @@ init_response(struct response* resp);
  * parse_request *
  *****************/
 
-int 
-parse_request(struct request* req, char* data, int len);
+int
+parse_request(struct request* req, char* data, int len)
+{
+    return 0;
+}
 
 
 /*****************
@@ -39,7 +126,10 @@ parse_request(struct request* req, char* data, int len);
  *****************/
 
 void 
-make_response(struct response* resp, char** data, int* len);
+make_response(struct response* resp, char** data, int* len)
+{
+    return 0;
+}
 
 /*********************************************************************
  *                                                                   *
@@ -47,17 +137,47 @@ make_response(struct response* resp, char** data, int* len);
  *                                                                   *
  *********************************************************************/
 
+/*************
+ * view_free *
+ *************/
+
+void
+view_free()
+{
+    int n_pages;
+    struct file* file;
+
+    n_pages = sizeof(view) / sizeof(struct page);
+
+    for (int i = 0; i < n_pages; i++) {
+        file = &view[i].file;
+        
+        if (file == NULL)
+            continue;
+
+        fclose(file->fp);
+        munmap(file->data, file->size);
+    }
+}
+
 /****************
- * free_request *
+ * request_free *
  ****************/
 
 void 
-free_request(struct request* req);
+request_free(struct request* req)
+{
+
+}
 
 /*****************
- * free_response *
+ * response_free *
  *****************/
 
 void 
-free_response(struct response* resp);
+response_free(struct response* resp)
+{
+
+}
+
 

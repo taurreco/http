@@ -1,8 +1,9 @@
 #ifndef HTTP_H
 #define HTTP_H
 
+#include <stdint.h>
+
 #define MAX_URI_LEN 200
-#define MAX_HEADER_LEN 200
 
 /*********************************************************************
  *                                                                   *
@@ -37,35 +38,6 @@ enum status_code {
     BAD_REQUEST = 400
 };
 
-/*******
- * uri *
- *******/
-
-struct uri {
-    char raw[MAX_URI_LEN];
-};
-
-/***************
- * header_host *
- ***************/
-
-struct header_host {
-    char raw[MAX_HEADER_LEN];
-    int len;
-    char* host;
-    char* host_end;
-    char* port;
-    char* port_end;
-};
-
-/*********************
- * header_user_agent *
- *********************/
-
-struct header_user_agent {
-    char raw[MAX_HEADER_LEN];
-};
-
 /***********
  * request *
  ***********/
@@ -74,31 +46,57 @@ struct header_user_agent {
 
 struct request {
     enum method_type method;                /* request line */
-    struct uri uri;
+    char uri[MAX_URI_LEN];
 
-    struct header_host host;                /* headers */
-    struct header_user_agent user_agent;
-
-    int data_len;                           /* body */
-    enum mime_type data_type;
-    uint8_t* data;
+    int content_len;                           /* body */
+    enum mime_type content_type;
+    uint8_t* content;
 };
 
 /************
  * response *
  ************/
 
-/* relevant data for an http response */
+/* relevant content for an http response */
 
 struct response {
     enum status_code status;
     char* status_msg;
 
-    int is_data_mmapped;
-    int data_len;
-    enum mime_type data_type;
-    uint8_t* data;
+    int content_len;
+    enum mime_type content_type;
+    uint8_t* content;
 };
+
+/********
+ * file *
+ ********/
+
+struct file {
+    FILE* fp;
+    uint8_t* data;
+    int fd;
+    int size;
+};
+
+/********
+ * page *
+ ********/
+
+struct page {
+    char* uri;
+    struct file file;
+};
+
+/*********************************************************************
+ *                                                                   *
+ *                               view                                *
+ *                                                                   *
+ *********************************************************************/
+
+/* holds file data associated with pages in the website */
+
+extern struct page view[];
 
 /*********************************************************************
  *                                                                   *
@@ -106,13 +104,16 @@ struct response {
  *                                                                   *
  *********************************************************************/
 
-void init_request(struct request* req);
+void request_init(struct request* req);
 int parse_request(struct request* req, char* data, int len);
 
-int init_response(struct response* resp);
+void response_init(struct response* resp);
 void make_response(struct response* resp, char** data, int* len);
 
-void free_request(struct request* req);
-void free_response(struct response* resp);
+void request_free(struct request* req);
+void response_free(struct response* resp);
+
+int view_init();
+void view_free();
 
 #endif    /* HTTP_H */
