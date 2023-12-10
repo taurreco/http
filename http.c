@@ -2,9 +2,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <time.h>
 #include <sys/mman.h>
 #include <errno.h>
 #include "http.h"
+
+#define MAX_DATE_LEN 200
 
 /*********************************************************************
  *                                                                   *
@@ -17,7 +20,54 @@ extern struct page view[] = {
     { "/webserver.png" }
 };
 
-char* view_loc = "pages";
+const char* view_loc  = "pages";
+const char* date_fmt  = "%a, %d %b %Y %H:%M:%S %Z";
+const char* resp_fmt  = "HTTP/1.0 %d %s\r\n"          /* status line */
+                        "Content-Type: %s\r\n"        /* headers */
+                        "Content-Length: %zu\r\n"
+                        "Date: %s\r\n"
+                        "\r\n";
+
+/*********************************************************************
+ *                                                                   *
+ *                              utility                              *
+ *                                                                   *
+ *********************************************************************/
+
+/**************
+ * status_str *
+ **************/
+
+char*
+status_str(enum status_code status)
+{
+    switch (status) {
+        case OK: 
+            return "OK";
+        case BAD_REQUEST: 
+            return "Bad Request";
+        default: 
+            return NULL;
+    }
+}
+
+/************
+ * mime_str *
+ ************/
+
+char*
+mime_str(enum mime_type type)
+{
+    switch (type) {
+        case TEXT_HTML: 
+            return  "text/html;charset=utf-8";
+        case IMAGE_PNG: 
+            return "image/png";
+        default: 
+            return NULL;
+    }
+}
+
 
 /*********************************************************************
  *                                                                   *
@@ -102,9 +152,10 @@ request_init(struct request* req)
 void 
 response_init(struct response* resp) 
 {
+    memset(resp, 0, sizeof(struct response));
 }
 
-/********************************************************************
+/*********************************************************************
  *                                                                   *
  *                             conversion                            *
  *                                                                   *
@@ -120,16 +171,70 @@ parse_request(struct request* req, char* data, int len)
     return 0;
 }
 
-
 /*****************
  * make_response *
  *****************/
 
 void 
-make_response(struct response* resp, char** data, int* len)
+make_response(struct response* resp, char** data, int* data_len)
 {
-    return 0;
+    time_t now;
+    struct tm* tm;
+    int len, full_len;
+    char *buf, *full_buf, *status_msg, *content_type;
+    char date[MAX_DATE_LEN];
+
+    status_msg = status_str(resp->status);
+    content_type = mime_str(resp->content_type);
+
+    now = time(NULL);
+    tm = gmtime(&now);
+
+    strftime(date, MAX_DATE_LEN, date_fmt, tm);
+    len = asprintf(&buf, resp_fmt, resp->status, status_msg, 
+                   content_type, resp->content_len, date);
+
+    /* pray to god len > 0 */
+
+    full_len = len + resp->content_len;
+
+    full_buf = malloc(full_len);
+    memcpy(full_buf, buf, len);
+    memcpy(full_buf + len, resp->content, resp->content_len);
+
+    free(buf);
+
+    *data = full_buf;
+    *data_len = full_len;
 }
+
+/*********************************************************************
+ *                                                                   *
+ *                               misc                                *
+ *                                                                   *
+ *********************************************************************/
+
+/*************
+ * view_find *
+ *************/
+
+int
+view_find(char* uri, struct file* file)
+{
+    int n_pages;
+
+    n_pages = sizeof(view) / sizeof(struct page);
+
+    for (int i = 0; i < n_pages; i++) {
+        if (strcmp(view[i].uri, uri) == 0) {
+            memcpy(file, &view[i].file, sizeof(struct file));
+            return 0;
+        }
+    }
+
+    return -1;
+}
+
 
 /*********************************************************************
  *                                                                   *

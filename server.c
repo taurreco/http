@@ -144,21 +144,26 @@ conn_init(struct conn* conn, int fd, struct sockaddr* addr, socklen_t addrlen) {
  *********************************************************************/
 
 /***************
- * conn_handle *
+ * handle_conn *
  ***************/
 
 /* handles the connection in a loop */
 
 void*
-conn_handle(void* arg)
+handle_conn(void* arg)
 {
     int n_bytes;
     struct conn* conn;
     char buf[MAX_BUF_LEN];
+    struct response resp;
+    struct file file;
     
     conn = arg;
 
     while (1) {
+        char* msg;
+        int msg_len;
+
         n_bytes = recv(conn->fd, buf, MAX_BUF_LEN, 0);
         
         if (n_bytes == 0) {
@@ -167,7 +172,8 @@ conn_handle(void* arg)
         }
 
         if (n_bytes < 0) {
-            fprintf(stderr, "[ERROR] client %d, recv: %s\n", conn->fd, strerror(errno));
+            fprintf(stderr, "[ERROR] client %d, recv: %s\n", 
+                    conn->fd, strerror(errno));
             return (void*)EXIT_FAILURE;
         }
 
@@ -176,7 +182,30 @@ conn_handle(void* arg)
 
         /* parse buf assuming the entire request is in buf */
         printf("recieved %s from client %d\n", buf, conn->fd);
-    }
+
+        /* create a response */
+
+        response_init(&resp);
+
+        resp.status = OK;
+        view_find("/index.html", &file);
+        resp.content = file.data;
+        resp.content_len = file.size;
+        resp.content_type = TEXT_HTML;
+
+        /* serialize response into text */
+        make_response(&resp, &msg, &msg_len);
+
+        n_bytes = send(conn->fd, msg, msg_len, 0);
+
+        if (n_bytes < 0) {
+            fprintf(stderr, "[ERROR] client %d, send: %s\n", 
+                    conn->fd, strerror(errno));
+            return (void*)EXIT_FAILURE;
+        }
+
+        free(msg);
+    }   
 }
 
 
@@ -246,7 +275,7 @@ main()
 
         conn_init(conn, conn_fd, (struct sockaddr*)&client, client_len);
     
-        status = pthread_create(&conn->thr, NULL, conn_handle, (void*)conn);
+        status = pthread_create(&conn->thr, NULL, handle_conn, (void*)conn);
 
         if (status < 0) {
             fprintf(stderr, "[ERROR] pthread_create: %s\n", strerror(status));

@@ -16,8 +16,8 @@
  *************/
 
 enum mime_type {
-    TEXT,
-    PNG
+    TEXT_HTML    = 0x00000000A,
+    IMAGE_PNG    = 0x000000024
 };
 
 /***************
@@ -61,7 +61,6 @@ struct request {
 
 struct response {
     enum status_code status;
-    char* status_msg;
 
     int content_len;
     enum mime_type content_type;
