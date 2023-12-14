@@ -13,7 +13,7 @@
 
 #define PORT             "8080"
 #define MAX_NUM_CONNS    12
-#define MAX_BUF_LEN      500
+#define MAX_BUF_LEN      1000
 
 /*********************************************************************
  *                                                                   *
@@ -157,8 +157,7 @@ handle_conn(void* arg)
     char buf[MAX_BUF_LEN];
     struct request req;
     struct response resp;
-    struct file file;
-    
+        
     conn = arg;
 
     while (1) {
@@ -185,7 +184,7 @@ handle_conn(void* arg)
 
         /* create request*/
         request_init(&req);
-        status = parse_request(&req, buf, n_bytes);
+        status = parse_request(&req, buf);
         
         /* create a response */
 

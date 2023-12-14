@@ -17,7 +17,8 @@
 
 enum mime_type {
     TEXT_HTML    = 0x00000000A,
-    IMAGE_PNG    = 0x000000024
+    IMAGE_PNG    = 0x000000024,
+    APP_XFORM    = 0x000000014,
 };
 
 /***************
@@ -79,13 +80,15 @@ struct file {
     int size;
 };
 
-/********
- * page *
- ********/
+/*********
+ * route *
+ *********/
 
-struct page {
-    char* uri;
+struct route {
+    char* resource;
+    char* page;
     struct file file;
+    enum mime_type type;
 };
 
 /*********************************************************************
@@ -96,7 +99,7 @@ struct page {
 
 /* holds file data associated with pages in the website */
 
-extern struct page view[];
+extern struct route view[];
 
 /*********************************************************************
  *                                                                   *
@@ -105,7 +108,7 @@ extern struct page view[];
  *********************************************************************/
 
 void request_init(struct request* req);
-enum status_code parse_request(struct request* req, char* data, int len);
+enum status_code parse_request(struct request* req, char* data);
 
 void response_init(struct response* resp);
 void make_response(struct response* resp, char** data, int* len);
