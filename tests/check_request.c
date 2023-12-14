@@ -33,11 +33,14 @@ void
 basic_get()
 {
     struct request req;
-    init_request(&req);
-    parse_request(&req, "GET / HTTP/1.0");
+    int status;
 
-    TEST_ASSERT_INT_EQUAL(GET, req.method);
-    TEST_ASSERT_STR_EQUAL("pages/index.html", req.uri.raw);
+    request_init(&req);
+    status = parse_request(&req, "GET / HTTP/1.0", 100);
+
+    TEST_ASSERT_EQUAL_INT(0, status);
+    TEST_ASSERT_EQUAL_INT(GET, req.method);
+    TEST_ASSERT_EQUAL_STRING("/index.html", req.uri);
 }
 
 /*********************************************************************
@@ -54,7 +57,7 @@ int
 main() 
 {
     UNITY_BEGIN();
-    RUN_TEST(basic);
+    RUN_TEST(basic_get);
     return UNITY_END();
 }
 

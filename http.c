@@ -8,6 +8,7 @@
 #include "http.h"
 
 #define MAX_DATE_LEN 200
+#define MAX_BUF_LEN 500
 
 /*********************************************************************
  *                                                                   *
@@ -26,13 +27,88 @@ const char* resp_fmt  = "HTTP/1.0 %d %s\r\n"          /* status line */
                         "Content-Type: %s\r\n"        /* headers */
                         "Content-Length: %zu\r\n"
                         "Date: %s\r\n"
-                        "\r\n";
+                        "\r\n";                       /* CRLF */
 
 /*********************************************************************
  *                                                                   *
  *                              utility                              *
  *                                                                   *
  *********************************************************************/
+
+/*****************
+ * is_whitespace *
+ *****************/
+
+int
+is_whitespace(char a)
+{
+    return a == ' ';
+}
+
+/***********
+ * is_crlf *
+ ***********/
+
+int
+is_crlf(char* a)
+{
+    return a[0] == '\r' && a[1] == '\n';
+}
+
+/********
+ * skip *
+ ********/
+
+int
+skip(char* data)
+{
+    int i;
+
+    i = 0;
+    while (is_whitespace(*data)) {
+        data++;
+        i++;
+    }
+
+    return i;
+}
+
+/*************
+ * skip_line *
+ *************/
+
+int
+skip_line(char* data)
+{
+    int i = 0;
+
+    while (*data != '\n') {
+        data++;
+        i++;
+    }
+    
+    return i;
+}
+
+/**************
+ * parse_word *
+ **************/
+
+int
+parse_word(char* data, char* buf)
+{
+    int i;
+
+    i = 0;
+    while(!is_whitespace(*data)) {
+        *buf = *data;
+        data++;
+        buf++;
+        i++;
+    }
+
+    return i;
+}
 
 /**************
  * status_str *
@@ -68,6 +144,27 @@ mime_str(enum mime_type type)
     }
 }
 
+/*************
+ * view_find *
+ *************/
+
+int
+view_find(char* uri, struct file* file)
+{
+    int n_pages;
+
+    n_pages = sizeof(view) / sizeof(struct page);
+
+    for (int i = 0; i < n_pages; i++) {
+        if (strcmp(view[i].uri, uri) == 0) {
+            if (file)
+                memcpy(file, &view[i].file, sizeof(struct file));
+            return 0;
+        }
+    }
+
+    return -1;
+}
 
 /*********************************************************************
  *                                                                   *
@@ -118,7 +215,7 @@ view_init()
         fd = fileno(fp);
         data = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
 
-        if (data < 0) {
+        if (data == MAP_FAILED) {
             fprintf(stderr, "[ERROR] mmap %s\n", strerror(errno));
             fclose(fp);
             view_free();
@@ -133,6 +230,8 @@ view_init()
         
         free(path);
     }
+
+    return 0;
 }
 
 /****************
@@ -165,9 +264,72 @@ response_init(struct response* resp)
  * parse_request *
  *****************/
 
-int
+enum status_code
 parse_request(struct request* req, char* data, int len)
 {
+    char buf[MAX_BUF_LEN];
+    int n_bytes, status;
+
+    status = 0;
+
+    /* request method type */
+
+    req->method = -1;
+    n_bytes = parse_word(data, buf);
+    buf[n_bytes] = 0;
+    data += n_bytes;
+
+    n_bytes = skip(data);
+    data += n_bytes;
+
+    if (strcmp(buf, "GET") == 0) {
+        req->method = GET;
+    }
+
+    if (req->method == -1)
+        return BAD_REQUEST;
+
+    /* uri */
+
+    n_bytes = parse_word(data, buf);
+    buf[n_bytes] = 0;
+    data += n_bytes;
+
+    if (strcmp(buf, "/") == 0) {
+        strcpy(req->uri, "/index.html");
+    } else {
+        status = view_find(buf, NULL);
+        if (status < 0)
+            return NOT_FOUND;
+        strcpy(req->uri, buf);
+    }
+
+    n_bytes = skip(data);
+    data += n_bytes;
+
+    /* version */
+    
+    n_bytes = parse_word(data, buf);
+    buf[n_bytes] = 0;
+    data += n_bytes;
+
+    /* skip it */
+
+    n_bytes = skip(data);
+    data += n_bytes;
+
+    /* headers */
+
+    /* 
+    n_bytes = skip_line(data);
+    while (!is_crlf(data)) {
+        data++;   
+        n_bytes = skip_line(data);
+        data += n_bytes;
+    };
+
+    */
+
     return 0;
 }
 
@@ -210,31 +372,47 @@ make_response(struct response* resp, char** data, int* data_len)
 
 /*********************************************************************
  *                                                                   *
- *                               misc                                *
+ *                              routing                              *
  *                                                                   *
  *********************************************************************/
 
-/*************
- * view_find *
- *************/
+/******************
+ * route_response *
+ ******************/
 
-int
-view_find(char* uri, struct file* file)
+void
+route_response(struct response* resp, struct request* req)
 {
-    int n_pages;
+    struct file file;
 
-    n_pages = sizeof(view) / sizeof(struct page);
-
-    for (int i = 0; i < n_pages; i++) {
-        if (strcmp(view[i].uri, uri) == 0) {
-            memcpy(file, &view[i].file, sizeof(struct file));
-            return 0;
-        }
+    switch (req->method) {
+        case GET:
+            resp->status = OK;
+            view_find(req->uri, &file);
+            resp->content = file.data;
+            resp->content_len = file.size;
+            resp->content_type = TEXT_HTML;
+            break;
+        default:
     }
-
-    return -1;
+    return;
 }
 
+/***************
+ * route_error *
+ ***************/
+
+void
+route_error(struct response* resp, enum status_code status)
+{
+    struct file file;
+
+    resp->status = status;
+    view_find(status_str(status), &file);
+    resp->content = file.data;
+    resp->content_len = file.size;
+    resp->content_type = TEXT_HTML; 
+}
 
 /*********************************************************************
  *                                                                   *

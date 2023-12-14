@@ -34,8 +34,9 @@ enum method_type {
  ***************/
 
 enum status_code {
-    OK = 200,
-    BAD_REQUEST = 400
+    OK              = 200,
+    BAD_REQUEST     = 400,
+    NOT_FOUND       = 404
 };
 
 /***********
@@ -104,13 +105,16 @@ extern struct page view[];
  *********************************************************************/
 
 void request_init(struct request* req);
-int parse_request(struct request* req, char* data, int len);
+enum status_code parse_request(struct request* req, char* data, int len);
 
 void response_init(struct response* resp);
 void make_response(struct response* resp, char** data, int* len);
 
 void request_free(struct request* req);
 void response_free(struct response* resp);
+
+void route_response(struct response* resp, struct request* req);
+void route_error(struct response* resp, enum status_code status);
 
 int view_init();
 void view_free();

@@ -13,7 +13,7 @@
 
 #define PORT             "8080"
 #define MAX_NUM_CONNS    12
-#define MAX_BUF_LEN      300
+#define MAX_BUF_LEN      500
 
 /*********************************************************************
  *                                                                   *
@@ -152,9 +152,10 @@ conn_init(struct conn* conn, int fd, struct sockaddr* addr, socklen_t addrlen) {
 void*
 handle_conn(void* arg)
 {
-    int n_bytes;
+    int n_bytes, status;
     struct conn* conn;
     char buf[MAX_BUF_LEN];
+    struct request req;
     struct response resp;
     struct file file;
     
@@ -180,19 +181,22 @@ handle_conn(void* arg)
         /* ASSUMING n_bytes < MAX_BUF_LEN */
         buf[n_bytes] = 0;
 
-        /* parse buf assuming the entire request is in buf */
-        printf("recieved %s from client %d\n", buf, conn->fd);
+        printf("\nrecieved from client %d:\n%s\n\n", conn->fd, buf);
 
+        /* create request*/
+        request_init(&req);
+        status = parse_request(&req, buf, n_bytes);
+        
         /* create a response */
 
         response_init(&resp);
 
-        resp.status = OK;
-        view_find("/index.html", &file);
-        resp.content = file.data;
-        resp.content_len = file.size;
-        resp.content_type = TEXT_HTML;
-
+        if (status == 0) {
+            route_response(&resp, &req);
+        } else {
+            route_error(&resp, status);           
+        }
+        
         /* serialize response into text */
         make_response(&resp, &msg, &msg_len);
 
