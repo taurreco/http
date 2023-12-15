@@ -43,6 +43,47 @@ basic_get()
     TEST_ASSERT_EQUAL_STRING("/", req.uri);
 }
 
+/***************
+ * basic_split *
+ ***************/
+
+void
+basic_split()
+{
+    char *left, *right;
+    char* src = "hello world!";
+
+    split(src, 5, &left, &right);
+
+    TEST_ASSERT_EQUAL_STRING("hello", left);
+    TEST_ASSERT_EQUAL_STRING(" world!", right);
+
+    free(left);
+    free(right);
+}
+
+/*****************
+ * split_on_html *
+ *****************/
+
+void
+split_on_html()
+{
+    char *cur, *left, *right;
+    char* src = "<hello></world!>";
+
+    cur = src;
+    next_angle_bracket(&cur);
+
+    split(src, cur - src + 1, &left, &right);
+
+    TEST_ASSERT_EQUAL_STRING("<hello>", left);
+    TEST_ASSERT_EQUAL_STRING("</world!>", right);
+
+    free(left);
+    free(right);
+}
+
 /********************
  * put_with_headers *
  ********************/
@@ -84,6 +125,30 @@ put_with_headers()
     TEST_ASSERT_EQUAL_STRING("username=tomas&password=dougan", req.content);
 }
 
+/*********************
+ * basic_handle_post *
+ *********************/
+
+void
+basic_handle_post()
+{
+    struct request req;
+    int status;
+    char* res;
+    char* html = "<div id=\"username\" ></div> <div id=\"password\" ></div>";
+
+    request_init(&req);
+    req.method = POST;
+    req.content_type = APP_XFORM;
+    req.content_len = 30;
+    req.content = "username=tomas&password=dougan";
+    handle_post(&req, html, &res);
+
+    TEST_ASSERT_EQUAL_STRING("<div id=\"username\" >tomas</div> "
+                             "<div id=\"password\" >dougan</div>", res);
+
+}
+
 /*********************************************************************
  *                                                                   *
  *                              main                                 *
@@ -99,7 +164,10 @@ main()
 {
     UNITY_BEGIN();
     RUN_TEST(basic_get);
+    RUN_TEST(basic_split);
+    RUN_TEST(split_on_html);
     RUN_TEST(put_with_headers);
+    RUN_TEST(basic_handle_post);
     return UNITY_END();
 }
 

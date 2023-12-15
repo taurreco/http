@@ -117,6 +117,7 @@ void request_free(struct request* req);
 void response_free(struct response* resp);
 
 void route_response(struct response* resp, struct request* req);
+void handle_post(struct request* req, char* html, char** res);
 void route_error(struct response* resp, enum status_code status);
 
 int view_init();

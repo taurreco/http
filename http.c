@@ -7,8 +7,20 @@
 #include <errno.h>
 #include "http.h"
 
-#define MAX_DATE_LEN 200
-#define MAX_BUF_LEN 500
+#define MAX_DATE_LEN        200
+#define MAX_BUF_LEN         500
+#define MAX_POST_ENTRIES    20
+
+/*********************************************************************
+ *                                                                   *
+ *                           data struct                             *
+ *                                                                   *
+ *********************************************************************/
+
+struct post_entry {
+    char key[MAX_BUF_LEN];
+    char val[MAX_BUF_LEN];
+};
 
 /*********************************************************************
  *                                                                   *
@@ -88,9 +100,50 @@ parse_word(char** data, char* buf)
     *buf = 0;
 }
 
-/**************
+/***************
+ * parse_entry *
+ ***************/
+
+void
+parse_entry(char** data, char* buf)
+{
+    while (**data != '&' && **data != 0) {
+        *buf = **data;
+        (*data)++;
+        buf++;
+    }
+
+    *buf = 0;
+}
+
+/*****************
+ * parse_key_val *
+ *****************/
+
+void
+parse_key_val(char* entry, char* key, char* val)
+{
+    while (*entry != '=') {
+        *key = *entry;
+        entry++;
+        key++;
+    }
+
+    entry++;
+
+    while (*entry != 0) {
+        *val = *entry;
+        entry++;
+        val++;
+    }
+
+    *key = 0;
+    *val = 0;
+}
+
+/*****************
  * status_to_str *
- **************/
+ *****************/
 
 char*
 status_to_str(enum status_code status)
@@ -106,9 +159,9 @@ status_to_str(enum status_code status)
     return NULL;
 }
 
-/************
+/***************
  * mime_to_str *
- ************/
+ ***************/
 
 char*
 mime_to_str(enum mime_type type)
@@ -136,15 +189,37 @@ str_to_mime(char* str)
     if (strcmp(str, "text/html;charset=utf-8") == 0)
         return TEXT_HTML;
 
-
     if (strcmp(str, "image/png") == 0)
         return IMAGE_PNG;
-
 
     if (strcmp(str, "application/x-www-form-urlencoded") == 0)
         return APP_XFORM;
     
     return 0;
+}
+
+/*********
+ * split *
+ *********/
+
+void
+split(char* start, int mid, char** left, char** right)
+{
+    *left = malloc(mid + 1);
+    memcpy(*left, start, mid);
+    (*left)[mid] = 0;
+    *right = strdup(start + mid);
+}
+
+/**********************
+ * next_angle_bracket *
+ **********************/
+
+void
+next_angle_bracket(char** data)
+{
+    while (**data != '>')
+        (*data)++;
 }
 
 /*************
@@ -219,20 +294,12 @@ view_init()
 
         /* map file */
 
-        fd = fileno(fp);
-        data = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
-
-        if (data == MAP_FAILED) {
-            fprintf(stderr, "[ERROR] mmap %s\n", strerror(errno));
-            fclose(fp);
-            view_free();
-            free(path);
-            return -1;
-        }
+        data = malloc(size + 1);
+        fread(data, size, 1, fp);
+        data[size] = 0;
 
         file->fp = fp;
         file->data = data;
-        file->fd = fd;
         file->size = size;
         
         free(path);
@@ -405,16 +472,72 @@ route_response(struct response* resp, struct request* req)
 {
     struct file file;
 
-    switch (req->method) {
-        case GET:
-            resp->status = OK;
-            view_find(req->uri, NULL, &file, &resp->content_type);
-            resp->content = file.data;
-            resp->content_len = file.size;
-            break;
-        default:
+    resp->status = OK;
+    view_find(req->uri, NULL, &file, &resp->content_type);
+    resp->content = file.data;
+    resp->content_len = file.size;
+}
+
+/***************
+ * handle_post *
+ ***************/
+
+void
+handle_post(struct request* req, char* html, char** res)
+{
+    struct post_entry entries[MAX_POST_ENTRIES];
+    char entry[MAX_BUF_LEN], key[MAX_BUF_LEN], val[MAX_BUF_LEN];
+    char buf[MAX_BUF_LEN];
+    char *content, *start, *cur;
+    int status, len;
+
+    /* parse entries into a table */
+
+    len = 0;
+    content = (char*)req->content;
+    while (*content != 0 && len < MAX_POST_ENTRIES) {
+        parse_entry(&content, entry);
+        content++;
+        parse_key_val(entry, key, val);
+        strcpy(entries[len].key, key);
+        strcpy(entries[len].val, val);
+        len++;
     }
-    return;
+
+    /* ignore status */
+
+    start = strdup(html);
+
+    for (int i = 0; i < len; i++) {
+        int mid;
+        char *key, *val, *target, *left, *right;
+        
+        mid = 0;
+        key = entries[i].key;
+        val = entries[i].val;
+        asprintf(&target, "id=\"%s\"", key);
+
+        cur = start;
+
+        while (*cur != 0) {
+            parse_word(&cur, buf);
+            skip(&cur);
+            if (strcmp(target, buf) == 0) {
+                next_angle_bracket(&cur);
+                mid = cur - start + 1;
+                split(start, mid, &left, &right);
+                free(start);
+                asprintf(&start, "%s%s%s", left, val, right);
+                cur = start + mid + 1;
+                free(left);
+                free(right);
+            }
+        }
+
+        free(target);
+    }
+
+    *res = start;
 }
 
 /***************
@@ -459,7 +582,7 @@ view_free()
             continue;
 
         fclose(file->fp);
-        munmap(file->data, file->size);
+        free(file->data);
     }
 }
 

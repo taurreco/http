@@ -157,7 +157,7 @@ handle_conn(void* arg)
     char buf[MAX_BUF_LEN];
     struct request req;
     struct response resp;
-        
+
     conn = arg;
 
     while (1) {
@@ -191,6 +191,16 @@ handle_conn(void* arg)
         response_init(&resp);
 
         if (status == 0) {
+            
+            if (req.method == POST) {
+                char *html, *res;
+                html = view[0].file.data;
+                handle_post(&req, html, &res);
+                free(html);
+                view[0].file.data = res;
+                printf("result is: %s\n", res);
+            }
+            
             route_response(&resp, &req);
         } else {
             route_error(&resp, status);           
