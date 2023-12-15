@@ -17,6 +17,7 @@
 
 enum mime_type {
     TEXT_HTML    = 0x00000000A,
+    TEXT_CSS     = 0x00000000B,
     IMAGE_PNG    = 0x000000024,
     APP_XFORM    = 0x000000014,
 };

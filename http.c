@@ -31,7 +31,9 @@ struct post_entry {
 struct route view[] = {
     { .resource = "/",              .page = "/index.html",    .file = { }, .type = TEXT_HTML },
     { .resource = "/login.html",    .page = "/login.html",    .file = { }, .type = TEXT_HTML },
-    { .resource = "/webserver.png", .page = "/webserver.png", .file = { }, .type = IMAGE_PNG }
+    { .resource = "/webserver.png", .page = "/webserver.png", .file = { }, .type = IMAGE_PNG },
+    { .resource = "/style/background.css", .page = "/style/background.css", .file = { }, .type = TEXT_CSS },
+    { .resource = "/4xx.html",      .page = "/4xx.html",      .file = {},  .type = TEXT_HTML }
 };
 
 const char* view_loc  = "pages";
@@ -131,7 +133,7 @@ parse_key_val(char* entry, char* key, char* val)
 
     entry++;
 
-    while (*entry != 0) {
+    while (*entry != 0 && *entry != ':' && *entry != ' ') {
         *val = *entry;
         entry++;
         val++;
@@ -153,6 +155,8 @@ status_to_str(enum status_code status)
             return "OK";
         case BAD_REQUEST: 
             return "Bad Request";
+        case NOT_FOUND:
+            return "Not Found";
         default: 
     }
 
@@ -168,12 +172,14 @@ mime_to_str(enum mime_type type)
 {
     switch (type) {
         case TEXT_HTML: 
-            return  "text/html;charset=utf-8";
+            return "text/html;charset=utf-8";
+        case TEXT_CSS:
+            return "text/css;charset=utf-8";
         case IMAGE_PNG: 
             return "image/png";
         case APP_XFORM:
             return "application/x-www-form-urlencoded";
-        default: 
+        default:
     }
 
     return NULL;
@@ -188,6 +194,9 @@ str_to_mime(char* str)
 {
     if (strcmp(str, "text/html;charset=utf-8") == 0)
         return TEXT_HTML;
+    
+    if (strcmp(str, "text/css;charset=utf-8") == 0)
+        return TEXT_CSS;
 
     if (strcmp(str, "image/png") == 0)
         return IMAGE_PNG;
@@ -262,7 +271,7 @@ int
 view_init()
 {
     FILE* fp;
-    int n_pages, status, fd, size;
+    int n_pages, status, size;
     uint8_t* data;
     struct file* file;
 
@@ -413,8 +422,9 @@ parse_request(struct request* req, char* data)
     /* body */
 
     if (req->content_len != 0) {
-        req->content = malloc(req->content_len);
+        req->content = malloc(req->content_len + 1);
         memcpy(req->content, data, req->content_len);
+        req->content[req->content_len] = 0;
     }
 
     return 0;
@@ -489,7 +499,7 @@ handle_post(struct request* req, char* html, char** res)
     char entry[MAX_BUF_LEN], key[MAX_BUF_LEN], val[MAX_BUF_LEN];
     char buf[MAX_BUF_LEN];
     char *content, *start, *cur;
-    int status, len;
+    int len;
 
     /* parse entries into a table */
 
@@ -497,7 +507,8 @@ handle_post(struct request* req, char* html, char** res)
     content = (char*)req->content;
     while (*content != 0 && len < MAX_POST_ENTRIES) {
         parse_entry(&content, entry);
-        content++;
+        if (*content)
+            content++;
         parse_key_val(entry, key, val);
         strcpy(entries[len].key, key);
         strcpy(entries[len].val, val);
@@ -547,14 +558,13 @@ handle_post(struct request* req, char* html, char** res)
 void
 route_error(struct response* resp, enum status_code status)
 {
-   // struct file file;
-/*
+    struct file file;
+
     resp->status = status;
-    view_find(status_to_str(status), &file);
-    resp->content = file.data;
-    resp->content_len = file.size;
+    view_find("/4xx.html", NULL, &file, NULL);
+    resp->content_len = asprintf((char**)&resp->content, (char*)file.data, status, status_to_str(status));
     resp->content_type = TEXT_HTML; 
-*/
+
 }
 
 /*********************************************************************

@@ -1,0 +1,25 @@
+body {
+    font-family: 'Arial', sans-serif;
+    background-color: #c3d4e0;
+    padding: 30px;
+    text-align: center;
+}
+
+input, textarea {
+    margin-bottom: 15px;
+    box-sizing: border-box;
+}
+
+button {
+    display: inline-block;
+    background-color: #3498db;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+button:hover {
+    background-color: #2980b9;
+}

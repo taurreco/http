@@ -133,7 +133,6 @@ void
 basic_handle_post()
 {
     struct request req;
-    int status;
     char* res;
     char* html = "<div id=\"username\" ></div> <div id=\"password\" ></div>";
 
@@ -141,7 +140,7 @@ basic_handle_post()
     req.method = POST;
     req.content_type = APP_XFORM;
     req.content_len = 30;
-    req.content = "username=tomas&password=dougan";
+    req.content = (uint8_t*)"username=tomas&password=dougan";
     handle_post(&req, html, &res);
 
     TEST_ASSERT_EQUAL_STRING("<div id=\"username\" >tomas</div> "

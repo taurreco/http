@@ -12,7 +12,7 @@
 #include "http.h"
 
 #define PORT             "8080"
-#define MAX_NUM_CONNS    12
+#define MAX_NUM_CONNS    1000
 #define MAX_BUF_LEN      1000
 
 /*********************************************************************
@@ -194,13 +194,12 @@ handle_conn(void* arg)
             
             if (req.method == POST) {
                 char *html, *res;
-                html = view[0].file.data;
+                html = (char*)view[0].file.data;
                 handle_post(&req, html, &res);
                 free(html);
-                view[0].file.data = res;
-                printf("result is: %s\n", res);
+                view[0].file.data = (uint8_t*)res;                
             }
-            
+            printf("%s\n", view[0].file.data);
             route_response(&resp, &req);
         } else {
             route_error(&resp, status);           
